@@ -87,8 +87,8 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
 
     var connectivityResult = await Connectivity().checkConnectivity();
 
-    bool isOffline = !(connectivityResult == ConnectivityResult.mobile ||
-        connectivityResult == ConnectivityResult.wifi);
+    bool isOffline = !(connectivityResult.contains(ConnectivityResult.mobile) ||
+        connectivityResult.contains(ConnectivityResult.wifi));
 
     /// 🔴 OFFLINE MODE
     if (isOffline) {
