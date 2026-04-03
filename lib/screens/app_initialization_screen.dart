@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../db/database_helper.dart';
 import 'new_order_screen.dart';
+import '../services/customer_sync_service.dart';
 
 class AppInitializationScreen extends StatefulWidget {
   const AppInitializationScreen({super.key});
@@ -208,6 +209,14 @@ class _AppInitializationScreenState
                 "Total Customers: $totalCustomers",
                 style: const TextStyle(
                     fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+
+              Text(
+                "Sync Status: ${CustomerSyncService.isSyncing ? "Syncing..." : "Idle"}",
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
               ),
 
               const SizedBox(height: 20),

@@ -1,82 +1,99 @@
 import '../api/api_service.dart';
 import '../db/database_helper.dart';
 import 'dart:convert';
+import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';
 
 class CustomerSyncService {
+
+  static bool _isSyncing = false;
+  static bool get isSyncing => _isSyncing;
 
   static Future<void> startSync({
     Function(int processed, int total)? onProgress,
     Function()? onComplete,
   }) async {
 
-    Map<String, dynamic> data;
-
-    final db = await DatabaseHelper.instance.database;
-
-    /// 🔴 STEP 1: Load customers (DB or API)
-    final result = await db.query('customers');
-
-    if (result.isNotEmpty && result.first['apiResponse'] != null) {
-      data = jsonDecode(result.first['apiResponse'].toString());
-    } else {
-      data = await apiCall(endpoint: "/customers");
-      await DatabaseHelper.instance.insertOrUpdateApiResponse(data);
+    if (_isSyncing) {
+      return;
     }
 
-    /// 🔴 STEP 2: Extract customers (ID + Name)
-    List<Map<String, String>> customers = (data['Result']['Table'] as List)
-        .map((e) => {
-      "id": e['Customer'].toString(),
-      "name": e['Name'].toString(),
-    })
-        .toList();
+    _isSyncing = true;
 
-    int totalCustomers = customers.length;
+    try {
+      Map<String, dynamic> data;
 
-    /// 🔴 STEP 3: Get last processed from DB
-    final lastRecord = await db.rawQuery(
-      "SELECT customer_id FROM customerFormData ORDER BY id DESC LIMIT 1",
-    );
+      final db = await DatabaseHelper.instance.database;
 
-    int startIndex = 0;
+      /// 🔴 STEP 1: Load customers (DB or API)
+      final result = await db.query('customers');
 
-    if (lastRecord.isNotEmpty) {
-      String lastCustomer = lastRecord.first['customer_id'].toString();
+      if (result.isNotEmpty && result.first['apiResponse'] != null) {
+        data = jsonDecode(result.first['apiResponse'].toString());
+      } else {
+        data = await apiCall(endpoint: "/customers");
+        await DatabaseHelper.instance.insertOrUpdateApiResponse(data);
+      }
 
-      int index = customers.indexWhere(
-            (c) => c["id"] == lastCustomer,
+      /// 🔴 STEP 2: Extract customers (ID + Name)
+      List<Map<String, String>> customers = (data['Result']['Table'] as List)
+          .map((e) =>
+      {
+        "id": e['Customer'].toString(),
+        "name": e['Name'].toString(),
+      })
+          .toList();
+
+      int totalCustomers = customers.length;
+
+      /// 🔴 STEP 3: Get last processed from DB
+      final lastRecord = await db.rawQuery(
+        "SELECT customer_id FROM customerFormData ORDER BY id DESC LIMIT 1",
       );
 
-      if (index != -1) {
-        /// ✅ Remove partial data before retry
-        await DatabaseHelper.instance.deleteCustomer(lastCustomer);
+      int startIndex = 0;
 
-        startIndex = index;
-      }
-    }
+      if (lastRecord.isNotEmpty) {
+        String lastCustomer = lastRecord.first['customer_id'].toString();
 
-    /// 🔴 STEP 4: Loop
-    for (int i = startIndex; i < customers.length; i++) {
-      var connectivityResult = await Connectivity().checkConnectivity();
+        int index = customers.indexWhere(
+              (c) => c["id"] == lastCustomer,
+        );
 
-      if (connectivityResult.contains(ConnectivityResult.mobile) ||
-          connectivityResult.contains(ConnectivityResult.wifi)) {
-        String customerId = customers[i]["id"]!;
-        String customerName = customers[i]["name"]!;
+        if (index != -1) {
+          /// ✅ Remove partial data before retry
+          await DatabaseHelper.instance.deleteCustomer(lastCustomer);
 
-        await processCustomer(customerId, customerName);
-
-        await Future.delayed(const Duration(milliseconds: 10));
-
-        int processed = i + 1;
-
-        if (onProgress != null) {
-          onProgress(processed, totalCustomers);
+          startIndex = index;
         }
-      }else{
-        break;
       }
+
+      /// 🔴 STEP 4: Loop
+      for (int i = startIndex; i < customers.length; i++) {
+        var connectivityResult = await Connectivity().checkConnectivity();
+
+        if (connectivityResult.contains(ConnectivityResult.mobile) ||
+            connectivityResult.contains(ConnectivityResult.wifi)) {
+          String customerId = customers[i]["id"]!;
+          String customerName = customers[i]["name"]!;
+
+          await processCustomer(customerId, customerName);
+
+          await Future.delayed(const Duration(milliseconds: 10));
+
+          int processed = i + 1;
+
+          if (onProgress != null) {
+            onProgress(processed, totalCustomers);
+          }
+        } else {
+          break;
+        }
+      }
+    } catch (e) {
+      print("❌ Sync error: $e");
+    } finally {
+      _isSyncing = false;
     }
 
     if (onComplete != null) {
@@ -161,5 +178,36 @@ class CustomerSyncService {
     } catch (e) {
       print("Error syncing $customerCode: $e");
     }
+  }
+
+  static Timer? _timer;
+
+  static void startAutoSync() {
+    _timer?.cancel(); // prevent duplicate timers
+
+    _timer = Timer.periodic(const Duration(seconds: 30), (timer) async {
+
+      // 🔒 Skip if already syncing
+      if (_isSyncing) {
+        return;
+      }
+
+      // 🌐 Check internet
+      var connectivityResult = await Connectivity().checkConnectivity();
+
+      bool isOnline = (connectivityResult.contains(ConnectivityResult.mobile) ||
+          connectivityResult.contains(ConnectivityResult.wifi));
+
+      if (isOnline) {
+        startSync();
+      } else {
+        print("📴 No internet");
+      }
+    });
+  }
+
+  static void stopAutoSync() {
+    _timer?.cancel();
+    _timer = null;
   }
 }

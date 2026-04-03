@@ -22,11 +22,7 @@ void main() async{
   await DatabaseHelper.instance.database;
 
   /// 🔴 Check connectivity BEFORE sync
-  var connectivityResult = await Connectivity().checkConnectivity();
-  if (connectivityResult.contains(ConnectivityResult.mobile) ||
-      connectivityResult.contains(ConnectivityResult.wifi)) {
-    CustomerSyncService.startSync(); // 👈 safe call
-  }
+  CustomerSyncService.startAutoSync();
   runApp(MyApp());
 }
 
