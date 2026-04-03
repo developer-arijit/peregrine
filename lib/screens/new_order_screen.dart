@@ -53,12 +53,11 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
   }
 
   Map<String, String> customers = {}; // key=Customer code, value=Name
-  bool isLoading = true; // loader
+  bool isLoading = false; // loader
 
   @override
   void initState() {
     super.initState();
-    loadCustomers(); // fetch data once
     loadUserData();
 
     customerFocusNode = FocusNode();
@@ -72,55 +71,6 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
     });
   }
 
-  Future<void> loadCustomers() async {
-    List<dynamic> table = [];
-
-    final data = await DatabaseHelper.instance.getApiResponse();
-
-    /// ✅ Always load base data first
-    table = data?['Result']?['Table'] ?? [];
-
-    if (table.isEmpty) {
-      setState(() => isLoading = false);
-      return;
-    }
-
-    var connectivityResult = await Connectivity().checkConnectivity();
-
-    bool isOffline = !(connectivityResult.contains(ConnectivityResult.mobile) ||
-        connectivityResult.contains(ConnectivityResult.wifi));
-
-    /// 🔴 OFFLINE MODE
-    if (isOffline) {
-      final db = await DatabaseHelper.instance.database;
-
-      final result = await db.query(
-        'customerFormData',
-        columns: ['customer_id', 'customer_name'],
-      );
-
-      /// ✅ Convert DB → same structure as API table
-      table = result.map((row) {
-        return {
-          "Customer": row['customer_id'].toString(),
-          "Name": row['customer_name'].toString(),
-        };
-      }).toList();
-    }
-
-    /// ✅ Create map (used for dropdown/autocomplete)
-    final customerMap = {
-      for (var item in table)
-        item['Customer'].toString(): item['Name'].toString()
-    };
-
-    /// ✅ Update UI
-    setState(() {
-      customers = customerMap;
-      isLoading = false;
-    });
-  }
-
   Future<void> loadCustomersDetails({
     required String customerCode
   }) async {
@@ -131,8 +81,8 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
         terms = '';
     var connectivityResult = await Connectivity().checkConnectivity();
 
-    bool isOnline = (connectivityResult == ConnectivityResult.mobile ||
-        connectivityResult == ConnectivityResult.wifi);
+    bool isOnline = (connectivityResult.contains(ConnectivityResult.mobile) ||
+        connectivityResult.contains(ConnectivityResult.wifi));
 
 
     if (isOnline) {
@@ -149,8 +99,8 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
 
       setState(() {
         customerDetailsData = data;
-        creditLimit = creditLimit;
-        terms = terms;
+        this.creditLimit = creditLimit;
+        this.terms = terms;
         isLoading = false;
       });
     }else{
@@ -207,8 +157,8 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
     });
 
     var connectivityResult = await Connectivity().checkConnectivity();
-    bool isOnline = (connectivityResult == ConnectivityResult.mobile ||
-        connectivityResult == ConnectivityResult.wifi);
+    bool isOnline = (connectivityResult.contains(ConnectivityResult.mobile) ||
+        connectivityResult.contains(ConnectivityResult.wifi));
 
 
     if (isOnline) {
@@ -461,7 +411,59 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
 
                   /// Customer Search (Built-in Autocomplete)
                   DropdownSearch<MapEntry<String, String>>(
-                    items: customers.entries.toList(),
+                    asyncItems: (String? filter) async {
+
+                      List<dynamic> table = [];
+
+                      final data = await DatabaseHelper.instance.getApiResponse();
+
+                      /// ✅ Base data (API cache)
+                      table = data?['Result']?['Table'] ?? [];
+
+                      var connectivityResult = await Connectivity().checkConnectivity();
+
+                      bool isOffline = !(connectivityResult.contains(ConnectivityResult.mobile) ||
+                          connectivityResult.contains(ConnectivityResult.wifi));
+
+                      /// 🔴 OFFLINE → load from DB
+                      if (isOffline) {
+                        final db = await DatabaseHelper.instance.database;
+
+                        final result = await db.query(
+                          'customerFormData',
+                          columns: ['customer_id', 'customer_name'],
+                        );
+
+                        table = result.map((row) {
+                          return {
+                            "Customer": row['customer_id'].toString(),
+                            "Name": row['customer_name'].toString(),
+                          };
+                        }).toList();
+                      }
+
+                      /// 🔍 Optional filter (search)
+                      if (filter != null && filter.isNotEmpty) {
+                        table = table.where((item) {
+                          return item['Name']
+                              .toString()
+                              .toLowerCase()
+                              .contains(filter.toLowerCase()) ||
+                              item['Customer']
+                                  .toString()
+                                  .toLowerCase()
+                                  .contains(filter.toLowerCase());
+                        }).toList();
+                      }
+
+                      /// ✅ Convert to MapEntry list
+                      return table.map<MapEntry<String, String>>((item) {
+                        return MapEntry(
+                          item['Customer'].toString(),
+                          item['Name'].toString(),
+                        );
+                      }).toList();
+                    },
 
                     itemAsString: (entry) => entry.value,
 
