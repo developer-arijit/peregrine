@@ -103,80 +103,94 @@ class CustomerSyncService {
 
   static Future<void> processCustomer(String customerCode, String customerName) async {
 
-    await DatabaseHelper.instance.deleteCustomer(customerCode);
-
-    try {
-      final details = await apiCall(
-        endpoint: "/get-customer-data",
-        method: "POST",
-        body: {
-          "operator": "OPS01",
-          "CustomerCode": customerCode,
-        },
-      );
-
-      final addresses =
-      details["CustomerDetails"]["CustomerDetail"]["Addresses"];
-
-      final shippingDiscounts =
-      details["CustomerDetails"]["CustomerDetail"]["ShippingDiscounts"];
-
-      details["CustomerDetails"]["CustomerDetail"].remove("Addresses");
-      details["CustomerDetails"]["CustomerDetail"]
-          .remove("ShippingDiscounts");
-
-      await DatabaseHelper.instance.insertRecord(
-        tableName: "customerDetails",
-        values: {
-          "customer_id": customerCode,
-          "apiResponse": jsonEncode(details),
-          "addressDetails": jsonEncode(addresses),
-          "shippingDiscounts": jsonEncode(shippingDiscounts),
-        },
-      );
-
-      final formData = await apiCall(
-        endpoint: "/get-order-form-data",
-        method: "POST",
-        body: {
-          "operator": "OPS01",
-          "Customer": customerCode,
-        },
-      );
-
-      final productDetails = formData["CustomerDetails"]["CustomerDetail"]["Products"]["Product"];
-
-      List productsList = [];
-
-      if (productDetails is List) {
-        productsList = productDetails;
-      } else if (productDetails is Map) {
-        productsList = [productDetails];
+    while (true) {
+      var connectivityResult = await Connectivity().checkConnectivity();
+      if (connectivityResult.contains(ConnectivityResult.mobile) ||
+          connectivityResult.contains(ConnectivityResult.wifi)) {
+        _isSyncing = true;
+      }else{
+        _isSyncing = false;
       }
+      try {
+        final details = await apiCall(
+          endpoint: "/get-customer-data",
+          method: "POST",
+          body: {
+            "operator": "OPS01",
+            "CustomerCode": customerCode,
+          },
+        );
 
-      await DatabaseHelper.instance
-          .insertMultipleProducts(customerCode, productsList);
+        final addresses = details["CustomerDetails"]["CustomerDetail"]["Addresses"];
 
-      //remove products from fromData
-      formData["CustomerDetails"]["CustomerDetail"].remove("Products");
+        final shippingDiscounts =
+        details["CustomerDetails"]["CustomerDetail"]["ShippingDiscounts"];
 
-      final addressDetails = formData["CustomerDetails"]["CustomerDetail"]["Addresses"]["AddressLineDetail"];
+        details["CustomerDetails"]["CustomerDetail"].remove("Addresses");
+        details["CustomerDetails"]["CustomerDetail"].remove(
+            "ShippingDiscounts");
 
-      //remove address from fromData
-      formData["CustomerDetails"]["CustomerDetail"].remove("Addresses");
+        await DatabaseHelper.instance.insertRecord(
+          tableName: "customerDetails",
+          values: {
+            "customer_id": customerCode,
+            "apiResponse": jsonEncode(details),
+            "addressDetails": jsonEncode(addresses),
+            "shippingDiscounts": jsonEncode(shippingDiscounts),
+          },
+        );
 
-      await DatabaseHelper.instance.insertRecord(
-        tableName: "customerFormData",
-        values: {
-          "customer_id": customerCode,
-          "customer_name": customerName,
-          "apiResponse": jsonEncode(formData),
-          "addressDetails": jsonEncode(addressDetails)
-        },
-      );
+        final formData = await apiCall(
+          endpoint: "/get-order-form-data",
+          method: "POST",
+          body: {
+            "operator": "OPS01",
+            "Customer": customerCode,
+          },
+        );
 
-    } catch (e) {
-      print("Error syncing $customerCode: $e");
+        final productDetails = formData["CustomerDetails"]["CustomerDetail"]["Products"]["Product"];
+
+        List productsList = [];
+
+        if (productDetails is List) {
+          productsList = productDetails;
+        } else if (productDetails is Map) {
+          productsList = [productDetails];
+        }
+
+        await DatabaseHelper.instance.insertMultipleProducts(customerCode, productsList);
+
+        //remove products from fromData
+        formData["CustomerDetails"]["CustomerDetail"].remove("Products");
+
+        final addressDetails = formData["CustomerDetails"]["CustomerDetail"]["Addresses"]["AddressLineDetail"];
+
+        //remove address from fromData
+        formData["CustomerDetails"]["CustomerDetail"].remove("Addresses");
+
+        await DatabaseHelper.instance.insertRecord(
+          tableName: "customerFormData",
+          values: {
+            "customer_id": customerCode,
+            "customer_name": customerName,
+            "apiResponse": jsonEncode(formData),
+            "addressDetails": jsonEncode(addressDetails)
+          },
+        );
+
+        print("✅ Success: $customerCode");
+        return; // 🎉 EXIT LOOP when everything is done
+      } catch (e) {
+        print("Error syncing $customerCode: $e");
+
+        await DatabaseHelper.instance.deleteCustomer(customerCode);
+
+        print("🔁 Retrying $customerCode...");
+
+        // Optional delay to avoid spamming API
+        await Future.delayed(const Duration(seconds: 2));
+      }
     }
   }
 

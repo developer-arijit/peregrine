@@ -1,55 +1,90 @@
 import 'package:flutter/material.dart';
 import '../core/auth/auth_service.dart';
+import '../services/customer_sync_service.dart';
 import '../api/api_service.dart';
 import '../db/database_helper.dart';
 import '../core/storage/secure_storage.dart';
 import 'app_initialization_screen.dart';
 
-class LoginScreen extends StatelessWidget {
+
+class LoginScreen extends StatefulWidget {
+  @override
+  _LoginScreenState createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
 
   // prevents multiple login calls
-  static bool isLoggingIn = false;
+  bool isLoggingIn = false;
 
   void login(BuildContext context) async {
 
     if (isLoggingIn) return;
 
-    isLoggingIn = true;
+    bool success = false;
 
-    bool success = await AuthService.login();
 
-    if (success) {
-      final data = await apiCall(endpoint: "/customers");
-      if (data != null) {
-        await DatabaseHelper.instance.insertOrUpdateApiResponse(data);
+    setState(() {
+      isLoggingIn = true;
+    });
 
+
+    try {
+      bool success = await AuthService.login();
+
+      if (!mounted) return;
+
+      if (!success) {
+        // ❌ cancel / fail → stop loader
+        setState(() {
+          isLoggingIn = false;
+        });
+        return;
+      }else{
+        final data = await apiCall(endpoint: "/customers");
+        if (data != null) {
+          await DatabaseHelper.instance.insertOrUpdateApiResponse(data);
+
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => AppInitializationScreen()),
+          );
+        }else{
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text("App initialization failed."),
+              duration: const Duration(days: 1), // effectively persistent
+              action: SnackBarAction(
+                label: "Logout",
+                onPressed: () async {
+                  // Call your logout method
+                  await SecureStorage.logout();
+
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(builder: (_) => LoginScreen()),
+                  );
+                },
+                textColor: Colors.white, // optional, to make it visible
+              ),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+        }
+
+        CustomerSyncService.startAutoSync();
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (_) => AppInitializationScreen()),
         );
-      }else{
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text("App initialization failed."),
-            duration: const Duration(days: 1), // effectively persistent
-            action: SnackBarAction(
-              label: "Logout",
-              onPressed: () async {
-                // Call your logout method
-                await SecureStorage.logout();
-
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (_) => LoginScreen()),
-                );
-              },
-              textColor: Colors.white, // optional, to make it visible
-            ),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
       }
+
+    } catch (e) {
+      setState(() {
+        isLoggingIn = false;
+      });
+      print(e);
     }
   }
 
@@ -105,11 +140,7 @@ class LoginScreen extends StatelessWidget {
   }
 
   Widget _buildContent(BuildContext context) {
-
-    return StatefulBuilder(
-      builder: (context, setState) {
-
-        return Column(
+    return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
 
@@ -132,51 +163,9 @@ class LoginScreen extends StatelessWidget {
             const SizedBox(height: 50),
 
             ElevatedButton.icon(
-              onPressed: isLoggingIn
-                  ? null
-                  : () async {
-
-                setState(() {
-                  isLoggingIn = true;
-                });
-
-                bool success = await AuthService.login();
-
-                if (success) {
-                  final data = await apiCall(endpoint: "/customers");
-                  if (data != null) {
-                    await DatabaseHelper.instance.insertOrUpdateApiResponse(data);
-
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(builder: (_) => AppInitializationScreen()),
-                    );
-                  }else{
-
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: const Text("App initialization failed."),
-                        duration: const Duration(days: 1), // effectively persistent
-                        action: SnackBarAction(
-                          label: "Logout",
-                          onPressed: () async {
-                            // Call your logout method
-                            await SecureStorage.logout();
-
-                            Navigator.pushReplacement(
-                              context,
-                              MaterialPageRoute(builder: (_) => LoginScreen()),
-                            );
-                          },
-                          textColor: Colors.white, // optional, to make it visible
-                        ),
-                        backgroundColor: Colors.redAccent,
-                      ),
-                    );
-                  }
-                }
+              onPressed: () {
+                login( context);
               },
-
               icon: isLoggingIn ? const SizedBox(
                 width: 18,
                 height: 18,
@@ -205,7 +194,5 @@ class LoginScreen extends StatelessWidget {
             ),
           ],
         );
-      },
-    );
   }
 }

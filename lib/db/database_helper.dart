@@ -102,35 +102,50 @@ class DatabaseHelper {
 
   }
 
-  Future<bool> isApiResponseExist() async {
-    final db = await instance.database;
+  static bool isDbBusy = false;
 
-    final result = await db.query('customers');
+  Future<bool> isApiResponseExist() async {
+    isDbBusy = true;
+    List<Map<String, Object?>> result = [];
+    try {
+      final db = await instance.database;
+
+      result = await db.query('customers');
+    }finally {
+      isDbBusy = false;
+    }
 
     return result.isNotEmpty;
+
   }
 
   Future<void> insertOrUpdateApiResponse(Map<String, dynamic> apiData) async {
     final db = await instance.database;
 
-    final result = await db.query('customers');
+    isDbBusy = true;
 
-    if (result.isEmpty) {
-      /// Insert first time
-      await db.insert(
-        'customers',
-        {
-          'apiResponse': jsonEncode(apiData),
-        },
-      );
-    } else {
-      /// Update existing row
-      await db.update(
-        'customers',
-        {
-          'apiResponse': jsonEncode(apiData),
-        },
-      );
+    try {
+      final result = await db.query('customers');
+
+      if (result.isEmpty) {
+        /// Insert first time
+        await db.insert(
+          'customers',
+          {
+            'apiResponse': jsonEncode(apiData),
+          },
+        );
+      } else {
+        /// Update existing row
+        await db.update(
+          'customers',
+          {
+            'apiResponse': jsonEncode(apiData),
+          },
+        );
+      }
+    }finally {
+      isDbBusy = false;
     }
   }
 
@@ -138,11 +153,16 @@ class DatabaseHelper {
   Future<Map<String, dynamic>?> getApiResponse() async {
     final db = await instance.database;
 
-    final result = await db.query('customers');
+    isDbBusy = true;
+    try {
+      final result = await db.query('customers');
 
-    if (result.isNotEmpty) {
-      final jsonString = result.first['apiResponse'] as String;
-      return jsonDecode(jsonString);
+      if (result.isNotEmpty) {
+        final jsonString = result.first['apiResponse'] as String;
+        return jsonDecode(jsonString);
+      }
+    }finally {
+      isDbBusy = false;
     }
 
     return null;
@@ -154,17 +174,26 @@ class DatabaseHelper {
     required Map<String, dynamic> values,
   }) async {
     final db = await instance.database;
+    int id = 0;
 
-    // Ensure tableName is provided
-    if (tableName.isEmpty || values.isEmpty) {
-      throw ArgumentError("Table name and values cannot be empty");
+    isDbBusy = true;
+    try {
+      // Ensure tableName is provided
+      if (tableName.isEmpty || values.isEmpty) {
+        throw ArgumentError("Table name and values cannot be empty");
+      }
+
+     id = await db.insert(
+        tableName,
+        values,
+        conflictAlgorithm: ConflictAlgorithm
+            .replace, // replaces if primary key exists
+      );
+    }finally {
+      isDbBusy = false;
     }
 
-    return await db.insert(
-      tableName,
-      values,
-      conflictAlgorithm: ConflictAlgorithm.replace, // replaces if primary key exists
-    );
+    return id;
   }
 
   /// Update a record in any table
@@ -176,16 +205,27 @@ class DatabaseHelper {
   }) async {
     final db = await instance.database;
 
-    if (tableName.isEmpty || values.isEmpty || where.isEmpty || whereArgs.isEmpty) {
-      throw ArgumentError("Table name, values, and where clause cannot be empty");
+    isDbBusy = true;
+    int id = 0;
+
+    try {
+      if (tableName.isEmpty || values.isEmpty || where.isEmpty ||
+          whereArgs.isEmpty) {
+        throw ArgumentError(
+            "Table name, values, and where clause cannot be empty");
+      }
+
+      id = await db.update(
+        tableName,
+        values,
+        where: where,
+        whereArgs: whereArgs,
+      );
+    }finally {
+      isDbBusy = false;
     }
 
-    return await db.update(
-      tableName,
-      values,
-      where: where,
-      whereArgs: whereArgs,
-    );
+    return id;
   }
 
   /// Delete all data from a table (truncate)
@@ -195,27 +235,37 @@ class DatabaseHelper {
     // Make sure tableName is not empty to prevent accidental deletion
     if (tableName.isEmpty) return;
 
-    await db.delete(tableName);
+    isDbBusy = true;
+    try {
+      await db.delete(tableName);
+    }finally {
+      isDbBusy = false;
+    }
   }
 
   Future<void> insertMultipleProducts(
-      String customerCode, List productsList) async {
+     String customerCode, List productsList) async {
 
-    final db = await database;
-    Batch batch = db.batch();
+    isDbBusy = true;
+    try {
+      final db = await database;
+      Batch batch = db.batch();
 
-    for (var singleProductDetails in productsList) {
-      batch.insert(
-        "customerProductData",
-        {
-          "customer_id": customerCode,
-          "productDetail": jsonEncode(singleProductDetails),
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      for (var singleProductDetails in productsList) {
+        batch.insert(
+          "customerProductData",
+          {
+            "customer_id": customerCode,
+            "productDetail": jsonEncode(singleProductDetails),
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+
+      await batch.commit(noResult: true);
+    }finally {
+      isDbBusy = false;
     }
-
-    await batch.commit(noResult: true);
   }
 
   /// Get records with pagination + where + order by
@@ -228,24 +278,30 @@ class DatabaseHelper {
     String? orderByField,
     String order = "DESC",
   }) async {
+    isDbBusy = true;
+    List<Map<String, Object?>> result = [];
+    try {
+      final db = await instance.database;
 
-    final db = await instance.database;
+      if (tableName.isEmpty) {
+        throw ArgumentError("Table name cannot be empty");
+      }
 
-    if (tableName.isEmpty) {
-      throw ArgumentError("Table name cannot be empty");
+      /// Pagination offset
+      int offset = (pageNumber - 1) * pageSize;
+
+      result = await db.query(
+        tableName,
+        where: whereCondition,
+        whereArgs: whereArgs,
+        orderBy: orderByField != null ? "$orderByField $order" : null,
+        limit: pageSize,
+        offset: offset,
+      );
+    }finally {
+      isDbBusy = false;
     }
-
-    /// Pagination offset
-    int offset = (pageNumber - 1) * pageSize;
-
-    return await db.query(
-      tableName,
-      where: whereCondition,
-      whereArgs: whereArgs,
-      orderBy: orderByField != null ? "$orderByField $order" : null,
-      limit: pageSize,
-      offset: offset,
-    );
+    return result;
   }
 
   Future<int> getTotalCount({
@@ -253,36 +309,52 @@ class DatabaseHelper {
     String? whereCondition,
     List<dynamic>? whereArgs,
   }) async {
-    final db = await instance.database;
+    isDbBusy = true;
+    int returnVal = 0;
 
-    var result = await db.rawQuery(
-      "SELECT COUNT(*) as count FROM $tableName ${whereCondition != null ? "WHERE $whereCondition" : ""}",
-      whereArgs,
-    );
+    try {
+      final db = await instance.database;
 
-    return Sqflite.firstIntValue(result) ?? 0;
+      var result = await db.rawQuery(
+        "SELECT COUNT(*) as count FROM $tableName ${whereCondition != null
+            ? "WHERE $whereCondition"
+            : ""}",
+        whereArgs,
+      );
+
+      returnVal = Sqflite.firstIntValue(result) ?? 0;
+    }finally {
+      isDbBusy = false;
+    }
+    return returnVal;
   }
 
   Future<void> deleteCustomer(String customerId) async {
     final db = await database;
+    isDbBusy = true;
+    try {
+      await db.transaction((txn) async {
+        await txn.delete(
+          "customerDetails",
+          where: "customer_id = ?",
+          whereArgs: [customerId],
+        );
 
-    await db.delete(
-      "customerDetails",
-      where: "customer_id = ?",
-      whereArgs: [customerId],
-    );
+        await txn.delete(
+          "customerFormData",
+          where: "customer_id = ?",
+          whereArgs: [customerId],
+        );
 
-    await db.delete(
-      "customerFormData",
-      where: "customer_id = ?",
-      whereArgs: [customerId],
-    );
-
-    await db.delete(
-      "customerProductData",
-      where: "customer_id = ?",
-      whereArgs: [customerId],
-    );
+        await txn.delete(
+          "customerProductData",
+          where: "customer_id = ?",
+          whereArgs: [customerId],
+        );
+      });
+    }finally{
+      isDbBusy = false;
+    }
   }
 
 }

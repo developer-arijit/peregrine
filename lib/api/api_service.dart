@@ -21,19 +21,27 @@ Future<dynamic> apiCall({
   headers["Authorization"] = "Bearer $token";
 
   http.Response response;
+  try {
+    Future<http.Response> request;
 
-  if (method == "POST") {
-    response = await http.post(url, headers: headers, body: jsonEncode(body));
-  }
-  else if (method == "PUT") {
-    response = await http.put(url, headers: headers, body: jsonEncode(body));
-  }
-  else if (method == "DELETE") {
-    response = await http.delete(url, headers: headers);
-  }
-  else {
-    response = await http.get(url, headers: headers);
-  }
+    if (method == "POST") {
+      request = http.post(url, headers: headers, body: jsonEncode(body));
+    }
+    else if (method == "PUT") {
+      request =  http.put(url, headers: headers, body: jsonEncode(body));
+    }
+    else if (method == "DELETE") {
+      request =  http.delete(url, headers: headers);
+    }
+    else {
+      request =  http.get(url, headers: headers);
+    }
 
-  return jsonDecode(response.body);
+    // ⏱️ Timeout after 1 minute
+    response = await request.timeout(const Duration(minutes: 2));
+
+    return jsonDecode(response.body);
+  } catch (e) {
+    throw Exception("API Timeout or Error: $e");
+  }
 }

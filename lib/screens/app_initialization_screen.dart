@@ -33,7 +33,7 @@ class _AppInitializationScreenState
 
   /// 🔴 AUTO REFRESH FROM DB
   void startAutoRefresh() {
-    timer = Timer.periodic(const Duration(seconds: 1), (timer) async {
+    timer = Timer.periodic(const Duration(seconds: 3), (timer) async {
       await loadProgressFromDB();
     });
   }
@@ -42,6 +42,9 @@ class _AppInitializationScreenState
   Future<void> loadProgressFromDB() async {
     final db = await DatabaseHelper.instance.database;
 
+    if(DatabaseHelper.isDbBusy == true){
+      return;
+    }
     /// TOTAL CUSTOMERS (from stored API)
     final customerTable = await db.query('customers');
 

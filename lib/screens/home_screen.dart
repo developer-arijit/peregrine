@@ -43,20 +43,16 @@ class _HomeScreenState extends State<HomeScreen> {
     if (connectivityResult.contains(ConnectivityResult.mobile) ||
         connectivityResult.contains(ConnectivityResult.wifi)) {
 
-      /// Sync API data
-      final data = await apiCall(endpoint: "/customers");
-      if (data != null) {
-        await DatabaseHelper.instance.insertOrUpdateApiResponse(data);
-      }
-
       /// Get refresh token
       String refreshToken = await SecureStorage.getToken("refresh") ?? "";
 
       /// Get new access token
       String? accessToken = await getAccessTokenFromRefreshToken(refreshToken);
 
-          /// If refresh token failed → go to login screen
-      if (accessToken == null) {
+      /// If refresh token failed → go to login screen
+      if (accessToken != null) {
+        await SecureStorage.saveToken("access", accessToken);
+      } else {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (_) => NewOrderScreen()),
@@ -64,10 +60,14 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
 
+      /// Sync API data
+      final data = await apiCall(endpoint: "/customers");
+      if (data != null) {
+        await DatabaseHelper.instance.insertOrUpdateApiResponse(data);
+      }
+
       /// Get user profile
       final user = await _getUserProfile(accessToken);
-
-      print(user);
 
       if (user != null) {
         await SecureStorage.saveUserName(user["displayName"] ?? "");

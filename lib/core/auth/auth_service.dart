@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:flutter_appauth/flutter_appauth.dart';
 import 'package:http/http.dart' as http;
 import '../storage/secure_storage.dart';
-import '../../services/common_methods.dart';
 
 class AuthService {
 

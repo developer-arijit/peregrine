@@ -80,6 +80,7 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
     var creditLimit = '',
         terms = '';
     var connectivityResult = await Connectivity().checkConnectivity();
+    print("Test: ${connectivityResult}");
 
     bool isOnline = (connectivityResult.contains(ConnectivityResult.mobile) ||
         connectivityResult.contains(ConnectivityResult.wifi));
