@@ -79,7 +79,7 @@ class CustomerSyncService {
 
           await processCustomer(customerId, customerName);
 
-          await Future.delayed(const Duration(milliseconds: 10));
+          await Future.delayed(const Duration(milliseconds: 60));
 
           int processed = i + 1;
 
@@ -102,15 +102,19 @@ class CustomerSyncService {
   }
 
   static Future<void> processCustomer(String customerCode, String customerName) async {
-
-    while (true) {
+    int retry = 0;
+    int delaySeconds = 2;
+    while (retry < 10) {
       var connectivityResult = await Connectivity().checkConnectivity();
       if (connectivityResult.contains(ConnectivityResult.mobile) ||
           connectivityResult.contains(ConnectivityResult.wifi)) {
         _isSyncing = true;
       }else{
         _isSyncing = false;
+        print("No Internet");
+        return;
       }
+
       try {
         final details = await apiCall(
           endpoint: "/get-customer-data",
@@ -127,18 +131,7 @@ class CustomerSyncService {
         details["CustomerDetails"]["CustomerDetail"]["ShippingDiscounts"];
 
         details["CustomerDetails"]["CustomerDetail"].remove("Addresses");
-        details["CustomerDetails"]["CustomerDetail"].remove(
-            "ShippingDiscounts");
-
-        await DatabaseHelper.instance.insertRecord(
-          tableName: "customerDetails",
-          values: {
-            "customer_id": customerCode,
-            "apiResponse": jsonEncode(details),
-            "addressDetails": jsonEncode(addresses),
-            "shippingDiscounts": jsonEncode(shippingDiscounts),
-          },
-        );
+        details["CustomerDetails"]["CustomerDetail"].remove("ShippingDiscounts");
 
         final formData = await apiCall(
           endpoint: "/get-order-form-data",
@@ -159,8 +152,6 @@ class CustomerSyncService {
           productsList = [productDetails];
         }
 
-        await DatabaseHelper.instance.insertMultipleProducts(customerCode, productsList);
-
         //remove products from fromData
         formData["CustomerDetails"]["CustomerDetail"].remove("Products");
 
@@ -169,15 +160,27 @@ class CustomerSyncService {
         //remove address from fromData
         formData["CustomerDetails"]["CustomerDetail"].remove("Addresses");
 
-        await DatabaseHelper.instance.insertRecord(
-          tableName: "customerFormData",
-          values: {
+        final db = await DatabaseHelper.instance.database;
+        await db.transaction((txn) async {
+
+          await txn.insert("customerDetails", {
+            "customer_id": customerCode,
+            "apiResponse": jsonEncode(details),
+            "addressDetails": jsonEncode(addresses),
+            "shippingDiscounts": jsonEncode(shippingDiscounts),
+          });
+
+          await DatabaseHelper.instance.insertMultipleProducts(customerCode, productsList, txn);
+
+          await txn.insert("customerFormData", {
             "customer_id": customerCode,
             "customer_name": customerName,
             "apiResponse": jsonEncode(formData),
             "addressDetails": jsonEncode(addressDetails)
-          },
-        );
+          });
+
+        });
+
 
         print("✅ Success: $customerCode");
         return; // 🎉 EXIT LOOP when everything is done
@@ -188,8 +191,9 @@ class CustomerSyncService {
 
         print("🔁 Retrying $customerCode...");
 
-        // Optional delay to avoid spamming API
-        await Future.delayed(const Duration(seconds: 2));
+        retry++;
+        await Future.delayed(Duration(seconds: delaySeconds));
+        delaySeconds *= 2; // double delay next time
       }
     }
   }

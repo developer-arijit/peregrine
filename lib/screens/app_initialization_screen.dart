@@ -42,9 +42,6 @@ class _AppInitializationScreenState
   Future<void> loadProgressFromDB() async {
     final db = await DatabaseHelper.instance.database;
 
-    if(DatabaseHelper.isDbBusy == true){
-      return;
-    }
     /// TOTAL CUSTOMERS (from stored API)
     final customerTable = await db.query('customers');
 
