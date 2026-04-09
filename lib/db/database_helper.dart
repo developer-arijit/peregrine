@@ -37,7 +37,9 @@ class DatabaseHelper {
 
     await db.execute('''
       CREATE TABLE customers (
-          apiResponse TEXT
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          apiResponse TEXT,
+          syncStatus INTEGER
       )
     ''');
 
@@ -65,7 +67,34 @@ class DatabaseHelper {
       CREATE TABLE customerProductData (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         customer_id TEXT,
-        productDetail Text
+        stockCode TEXT,
+        description TEXT,
+        mass TEXT,
+        volume TEXT,
+        supplier TEXT,
+        productClass TEXT,
+        taxCode TEXT,
+        taxPercent TEXT,
+        kitType TEXT,
+        stockOnHold TEXT, 
+        stockOnHoldReason TEXT,
+        salesOnHold TEXT,
+        productGroup TEXT,
+        onHoldReason TEXT,
+        warehouse TEXT,
+        selectionArea TEXT,
+        discountPercentage TEXT,
+        sellingPrice TEXT,
+        discountAmount TEXT,
+        sellingPriceLessDiscount TEXT,
+        stock TEXT,
+        weight TEXT,
+        productLength TEXT,
+        productWidth TEXT,
+        productHeight TEXT,
+        unitBarcode TEXT,
+        hazardous TEXT,
+        webProduct TEXT
       )
     ''');
 
@@ -223,11 +252,39 @@ class DatabaseHelper {
     Batch batch = txn.batch();
 
     for (var singleProductDetails in productsList) {
+
       batch.insert(
         "customerProductData",
         {
           "customer_id": customerCode,
-          "productDetail": jsonEncode(singleProductDetails),
+          "stockCode":  singleProductDetails["StockCode"],
+          "description": singleProductDetails["Description"],
+          "mass": singleProductDetails["Mass"],
+          "volume": singleProductDetails["Volume"],
+          "supplier" : singleProductDetails["Supplier"],
+          "productClass": singleProductDetails["ProductClass"],
+          "taxCode": singleProductDetails["TaxCode"],
+          "taxPercent": singleProductDetails["TaxPercent"],
+          "kitType": singleProductDetails["KitType"],
+          "stockOnHold": singleProductDetails["StockOnHold"],
+          "stockOnHoldReason" : singleProductDetails["StockOnHoldReason"],
+          "salesOnHold": singleProductDetails["SalesOnHold"],
+          "productGroup": singleProductDetails["ProductGroup"],
+          "onHoldReason": singleProductDetails["OnHoldReason"],
+          "warehouse": singleProductDetails["Warehouse"],
+          "selectionArea": singleProductDetails["SelectionArea"],
+          "discountPercentage": singleProductDetails["DiscountPercentage"],
+          "sellingPrice": singleProductDetails["SellingPrice"],
+          "discountAmount": singleProductDetails["discountAmount"],
+          "sellingPriceLessDiscount": singleProductDetails["SellingPriceLessDiscount"],
+          "stock" : singleProductDetails["Stock"],
+          "weight": singleProductDetails["Weight"],
+          "productLength": singleProductDetails["ProductLength"],
+          "productWidth": singleProductDetails["ProductWidth"],
+          "productHeight": singleProductDetails["ProductHeight"],
+          "unitBarcode": singleProductDetails["UnitBarcode"],
+          "hazardous": singleProductDetails["Hazardous"],
+          "webProduct": singleProductDetails["WebProduct"]
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
       );

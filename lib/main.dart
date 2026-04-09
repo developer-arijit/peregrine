@@ -24,7 +24,26 @@ void main() async {
   bool loggedIn = await TokenManager.isLoggedIn();
   if (loggedIn == true){
     /// 🔴 Check connectivity BEFORE sync
-    CustomerSyncService.startAutoSync();
+    final db = await DatabaseHelper.instance.database;
+
+    // Get the syncStatus of the first customer row
+    final result = await db.query(
+      'customers',
+      columns: ['syncStatus'],
+      limit: 1, // Only need the first row
+    );
+
+    if (result.isNotEmpty) {
+      final syncStatus = result.first['syncStatus'];
+
+      // Only start auto-sync if syncStatus is null or 0
+      if (syncStatus == null || syncStatus == 0) {
+        CustomerSyncService.startAutoSync();
+      }
+    } else {
+      // No rows exist, optionally handle this case
+      CustomerSyncService.startAutoSync(); // If you want to trigger when table is empty
+    }
   }
 
   runApp(MyApp());

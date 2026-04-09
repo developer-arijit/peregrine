@@ -42,41 +42,40 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (connectivityResult.contains(ConnectivityResult.mobile) ||
         connectivityResult.contains(ConnectivityResult.wifi)) {
+      try {
+        String refreshToken = await SecureStorage.getToken("refresh") ?? "";
 
-      /// Get refresh token
-      String refreshToken = await SecureStorage.getToken("refresh") ?? "";
+        String? accessToken = await getAccessTokenFromRefreshToken(refreshToken);
 
-      /// Get new access token
-      String? accessToken = await getAccessTokenFromRefreshToken(refreshToken);
+        if (accessToken != null) {
+          await SecureStorage.saveToken("access", accessToken);
+        } else {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => NewOrderScreen()),
+          );
+          return;
+        }
 
-      /// If refresh token failed → go to login screen
-      if (accessToken != null) {
-        await SecureStorage.saveToken("access", accessToken);
-      } else {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => NewOrderScreen()),
-        );
-        return;
-      }
+        final data = await apiCall(endpoint: "/customers");
+        if (data != null) {
+          await DatabaseHelper.instance.insertOrUpdateApiResponse(data);
+        }
 
-      /// Sync API data
-      final data = await apiCall(endpoint: "/customers");
-      if (data != null) {
-        await DatabaseHelper.instance.insertOrUpdateApiResponse(data);
-      }
+        final user = await _getUserProfile(accessToken);
 
-      /// Get user profile
-      final user = await _getUserProfile(accessToken);
+        if (user != null) {
+          await SecureStorage.saveUserName(user["displayName"] ?? "");
+          await SecureStorage.saveUserEmail(
+              user["mail"] ?? user["userPrincipalName"] ?? "");
+          await SecureStorage.saveUserId(user["id"] ?? "");
 
-      if (user != null) {
-        await SecureStorage.saveUserName(user["displayName"] ?? "");
-        await SecureStorage.saveUserEmail(
-            user["mail"] ?? user["userPrincipalName"] ?? "");
-        await SecureStorage.saveUserId(user["id"] ?? "");
+          /// 🔥 Do NOT await this
+          getUserImage(accessToken);
+        }
 
-        /// Get profile image
-        await getUserImage(accessToken);
+      } catch (e) {
+        print("App initialize failed reason: $e");
       }
     }
 

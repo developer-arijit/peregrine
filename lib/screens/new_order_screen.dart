@@ -80,7 +80,6 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
     var creditLimit = '',
         terms = '';
     var connectivityResult = await Connectivity().checkConnectivity();
-    print("Test: ${connectivityResult}");
 
     bool isOnline = (connectivityResult.contains(ConnectivityResult.mobile) ||
         connectivityResult.contains(ConnectivityResult.wifi));
@@ -206,9 +205,40 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
           apiResponse["CustomerDetails"]["CustomerDetail"]["Addresses"]["AddressLineDetail"] = '';
         }
 
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_customer_id ON customerProductData(customer_id)');
         final products = await db.query(
           'customerProductData',
-          columns: ['customer_id', 'productDetail'],
+          columns: [
+            'customer_id',
+            'stockCode',
+            'description',
+            'mass',
+            'volume',
+            'supplier',
+            'productClass',
+            'taxCode',
+            'taxPercent',
+            'kitType',
+            'stockOnHold',
+            'stockOnHoldReason',
+            'salesOnHold',
+            'productGroup',
+            'onHoldReason',
+            'warehouse',
+            'selectionArea',
+            'discountPercentage',
+            'sellingPrice',
+            'discountAmount',
+            'sellingPriceLessDiscount',
+            'stock',
+            'weight',
+            'productLength',
+            'productWidth',
+            'productHeight',
+            'unitBarcode',
+            'hazardous',
+            'webProduct',
+          ],
           where: 'customer_id = ?',
           whereArgs: [customerCode],
         );
@@ -216,21 +246,37 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
         List<Map<String, dynamic>> productList = [];
 
         if (products.isNotEmpty) {
-          for (var row in products) {
-            final productDetail = row['productDetail'];
-            if (productDetail != null) {
-              final decoded = jsonDecode(productDetail.toString());
 
-              if (decoded is List) {
-                // Cast each element to Map<String, dynamic>
-                productList.addAll(decoded.map<Map<String, dynamic>>(
-                      (e) => Map<String, dynamic>.from(e),
-                ));
-              } else if (decoded is Map) {
-                productList.add(Map<String, dynamic>.from(decoded));
-              }
-            }
-          }
+            productList = products.map((row) => {
+              "StockCode": row["stockCode"],
+              "Description": row["description"],
+              "Mass": row["mass"],
+              "Volume": row["volume"],
+              "Supplier": row["supplier"],
+              "ProductClass": row["productClass"],
+              "TaxCode": row["taxCode"],
+              "TaxPercent": row["taxPercent"],
+              "KitType": row["kitType"],
+              "StockOnHold": row["stockOnHold"],
+              "StockOnHoldReason": row["stockOnHoldReason"],
+              "SalesOnHold": row["salesOnHold"],
+              "ProductGroup": row["productGroup"],
+              "OnHoldReason": row["onHoldReason"],
+              "Warehouse": row["warehouse"],
+              "SelectionArea": row["selectionArea"],
+              "DiscountPercentage": row["discountPercentage"],
+              "SellingPrice": row["sellingPrice"],
+              "DiscountAmount": row["discountAmount"], // ⚠️ check key (see below)
+              "SellingPriceLessDiscount": row["sellingPriceLessDiscount"],
+              "Stock": row["stock"],
+              "Weight": row["weight"],
+              "ProductLength": row["productLength"],
+              "ProductWidth": row["productWidth"],
+              "ProductHeight": row["productHeight"],
+              "UnitBarcode": row["unitBarcode"],
+              "Hazardous": row["hazardous"],
+              "WebProduct": row["webProduct"],
+            }).toList();
         }
 
         /// ✅ Inject products into apiResponse

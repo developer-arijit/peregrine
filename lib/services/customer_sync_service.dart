@@ -19,7 +19,7 @@ class CustomerSyncService {
     }
 
     _isSyncing = true;
-
+    bool isFullySynced = true;
     try {
       Map<String, dynamic> data;
 
@@ -87,6 +87,7 @@ class CustomerSyncService {
             onProgress(processed, totalCustomers);
           }
         } else {
+          isFullySynced = false;
           break;
         }
       }
@@ -98,6 +99,19 @@ class CustomerSyncService {
 
     if (onComplete != null) {
       onComplete();
+      if (isFullySynced) {
+        try {
+          final db = await DatabaseHelper.instance.database;
+          await db.update(
+            'customers',
+            {'syncStatus': 1},
+            where: 'id = ?', // update first row only
+            whereArgs: [1],
+          );
+        } catch (e) {
+          print("❌ Failed to update syncStatus: $e");
+        }
+      }
     }
   }
 
