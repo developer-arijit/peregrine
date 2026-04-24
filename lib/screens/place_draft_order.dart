@@ -632,7 +632,7 @@ class _DraftOrderShippingScreenState extends State<DraftOrderShippingScreen> {
                                     showSearchBox: true,
                                     searchFieldProps: TextFieldProps(
                                       decoration: InputDecoration(
-                                        hintText: "Search delivery customer...",
+                                        hintText: "Search delivery address...",
                                         contentPadding:
                                         EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                       ),
@@ -641,7 +641,7 @@ class _DraftOrderShippingScreenState extends State<DraftOrderShippingScreen> {
 
                                   dropdownDecoratorProps: DropDownDecoratorProps(
                                     dropdownSearchDecoration: InputDecoration(
-                                      hintText: "Select delivery customer",
+                                      hintText: "Select delivery address",
                                       contentPadding:
                                       EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                     ),

@@ -578,7 +578,7 @@ class _NewOrderShippingScreenState extends State<NewOrderShippingScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          "Select Customer",
+                          "Select Address",
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
@@ -597,7 +597,7 @@ class _NewOrderShippingScreenState extends State<NewOrderShippingScreen> {
                           showSearchBox: true,
                           searchFieldProps: TextFieldProps(
                             decoration: InputDecoration(
-                              hintText: "Search customer...",
+                              hintText: "Search address...",
                               contentPadding:
                               EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                             ),
@@ -606,7 +606,7 @@ class _NewOrderShippingScreenState extends State<NewOrderShippingScreen> {
 
                         dropdownDecoratorProps: DropDownDecoratorProps(
                           dropdownSearchDecoration: InputDecoration(
-                            hintText: "Select customer",
+                            hintText: "Select Address",
                             contentPadding:
                             EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                           ),
@@ -844,7 +844,7 @@ class _NewOrderShippingScreenState extends State<NewOrderShippingScreen> {
                                       Text(
                                         result["orderPlaced"] == true
                                             ? "Order placed successfully."
-                                            : "We have saved order details to draft. You can continue when online.",
+                                            : "We have saved order details in the draft. You can continue when online.",
                                         style: TextStyle(
                                           fontSize: 18,
                                           fontWeight: FontWeight.w600,
