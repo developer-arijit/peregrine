@@ -6,8 +6,11 @@ import '../core/storage/secure_storage.dart';
 import 'new_order_screen.dart';
 import 'app_initialization_screen.dart';
 import '../db/database_helper.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:intl/intl.dart';
 import 'draft_orders.dart';
+import '../api/api_service.dart';
+import 'place_draft_order.dart';
 
 class OrderScreen extends StatefulWidget {
   const OrderScreen({Key? key}) : super(key: key);
@@ -22,11 +25,14 @@ class _OrderScreenState extends State<OrderScreen> {
   Uint8List? userImageBytes;
   int pageSize = 20;
   int totalPages = 1;
+  String terms = "";
 
   List orders = [];
   int page = 1;
   bool isLoading = false;
   bool hasMore = true;
+  Map<String, dynamic> customerDetailsData = {};
+  Map<String, dynamic> customerOrderData = {};
 
   /// Load user info
   Future<void> loadUserData() async {
@@ -53,13 +59,62 @@ class _OrderScreenState extends State<OrderScreen> {
   }) async {
     return await DatabaseHelper.instance.getRecords(
       tableName: "orders",
-      whereCondition: "user_id = ? AND order_status = ?",
-      whereArgs: [userId, "Placed"],
+     // whereCondition: "user_id = ? AND order_status = ?",
+     // whereArgs: [userId, "Placed"],
       pageNumber: page,
       pageSize: pageSize,
       orderByField: "id",
       order: "DESC",
     );
+  }
+
+  Future<void> loadCustomersDetails({
+    required String customerCode
+  }) async {
+    setState(() {
+      isLoading = true;
+    });
+    var creditLimit = '',
+        Terms = '';
+    final data = await apiCall(
+        endpoint: "/get-customer-data",
+        method: "POST",
+        body: {
+          "operator": "OPS01",
+          "CustomerCode": customerCode
+        }
+    );
+    creditLimit = data["CustomerDetails"]?["CustomerDetail"]?["CreditLimit"];
+    Terms = data["CustomerDetails"]?["CustomerDetail"]?["Terms"];
+    setState(() {
+      customerDetailsData = data;
+      creditLimit = creditLimit;
+      terms = Terms;
+      isLoading = false;
+    });
+  }
+
+  Future<void> loadProducts ({
+    required String customerCode
+  }) async {
+    setState(() {
+      isLoading = true;   // 👈 show loader
+    });
+
+    final data = await apiCall(
+        endpoint: "/get-order-form-data",
+        method: "POST",
+        body: {
+          "operator": "OPS01",
+          "Customer": customerCode
+        }
+    );
+    if (!mounted) return;
+
+    setState(() {
+      isLoading = false;
+      customerOrderData = data;
+    });
   }
 
   Future<void> loadOrders() async {
@@ -337,7 +392,417 @@ class _OrderScreenState extends State<OrderScreen> {
       courier = shippingAddress?["courier_name"] ?? "--";
     }
 
-    return Card(
+    if(order['order_status'] == 'Draft'){
+      return Card(
+        margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+        elevation: 6,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: const BorderSide(color: Colors.blue, width: 1.2),
+        ),
+        color: Colors.lightBlue.shade600,
+
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+
+              /// TOP ROW → Delivery / Collection badge only
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Row(
+                            children: [
+                              Text(
+                                "Placed on: ",
+                                style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700),
+                              ),
+                              Text(
+                                "${order["order_date"]}",
+                                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+                              ),
+                            ]
+                        ),
+                      ]
+                  ),
+
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      "Draft" ,
+                      style: TextStyle(
+                        color:  Colors.red,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+
+              const Divider(
+                color: Colors.white54,
+                thickness: 1,
+                height: 20,
+              ),
+
+              Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Row(
+                        children: [
+                          /// ORDER ID
+                          const Text(
+                            "Order ID: ",
+                            style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight(700)),
+                          ),
+
+                          Text(
+                            "#${order["id"]}" ?? "-",
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ]
+                    )
+                  ]
+              ),
+
+              Row(
+                  children: [
+                    Text(
+                      "PO Number: ",
+                      style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight(700)),
+                    ),
+                    Text(
+                      "${order["po_number"] ?? ""}",
+                      style: const TextStyle(color: Colors.white, fontSize: 15),
+                    ),
+                  ]
+              ),
+
+              Text.rich(
+                TextSpan(
+                  children: [
+                    const TextSpan(
+                      text: "Customer: ",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    TextSpan(
+                      text:  order["customer_name"] ?? "",
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 6),
+              if (isDelivery && shippingAddress != null)
+                Text.rich(
+                  TextSpan(
+                    children: [
+                      const TextSpan(
+                        text: "Courier: ",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      TextSpan(
+                        text: courier,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+              if (isDelivery && shippingAddress != null)
+                Row(
+                    children: [
+                      Text(
+                        "Dispatch Date: ",
+                        style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight(700)),
+                      ),
+                      Text(
+                        dispatchDate,
+                        style: const TextStyle(color: Colors.white, fontSize: 15),
+                      ),
+                    ]
+                ),
+
+              if (isDelivery && shippingAddress != null)
+                Row(
+                    children: [
+                      Text(
+                        "Delivery Date: ",
+                        style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight(700)),
+                      ),
+                      Text(
+                        deliveryDate,
+                        style: const TextStyle(color: Colors.white, fontSize: 15),
+                      ),
+                    ]
+                ),
+
+              const SizedBox(height: 8),
+
+              /// Address (only for delivery)
+              if (isDelivery && shippingAddress != null)
+                Text.rich(
+                  TextSpan(
+                    children: [
+                      const TextSpan(
+                        text: "Shipping Address: ",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      TextSpan(
+                        text:  getFullAddress(shippingAddress),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+              const Divider(
+                color: Colors.white54,
+                thickness: 1,
+                height: 20,
+              ),
+
+              Row(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  children: [
+                    /// ORDER DETAILS heading (professional look)
+                    const Text(
+                      "Order Summary",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ]
+              ),
+
+              const SizedBox(height: 8),
+
+              /// Items total / Shipping / Tax → in ONE ROW
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.white70, width: 1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text("Subtotal", style: TextStyle(color: Colors.white, fontWeight: FontWeight(700), fontSize: 12 )),
+                        Text(
+                          "£${order["order_value"] ?? "0"}",
+                          style: const TextStyle(color: Colors.white, fontSize: 13),
+                        ),
+                      ],
+                    ),
+
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text("Shipping", style: TextStyle(color: Colors.white, fontWeight: FontWeight(700), fontSize: 12 )),
+                        Text(
+                          "£${order["shipping_amount"] ?? "0"}",
+                          style: const TextStyle(color: Colors.white, fontSize: 13),
+                        ),
+                      ],
+                    ),
+
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text("Vat", style: TextStyle(color: Colors.white, fontWeight: FontWeight(700), fontSize: 12 )),
+                        Text(
+                          "£${order["total_tax"] ?? "0"}",
+                          style: const TextStyle(color: Colors.white, fontSize: 13),
+                        ),
+                      ],
+                    ),
+
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text("Total", style: TextStyle(color: Colors.white, fontWeight: FontWeight(700), fontSize: 12 )),
+                        Text(
+                          "£${order["order_grand_total"] ?? "0"}",
+                          style: const TextStyle(color: Colors.white, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              /// Button with icon
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.blue,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  onPressed: () {
+                    showProductsPopup(
+                        context,
+                        int.parse(order["id"].toString()),
+                        ""
+                    );
+                  },
+                  icon: const Icon(Icons.shopping_bag_outlined),
+                  label:  Text(
+                    "View ${order["no_of_products"] == 1 ? "1 Product" : "${order["no_of_products"] ?? 0} Products"}",
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.blue,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  onPressed: () async {
+                    var connectivityResult = await Connectivity().checkConnectivity();
+
+                    if (connectivityResult.contains(ConnectivityResult.mobile) ||
+                        connectivityResult.contains(ConnectivityResult.wifi)) {
+                      setState(() {
+                        isLoading: true;
+                      });
+
+                      await loadCustomersDetails(customerCode: order["customer_id"]);
+                      await loadProducts(customerCode: order["customer_id"]);
+
+                      List<Map<String, dynamic>> items = [];
+                      var products = await DatabaseHelper.instance.getRecords(
+                        tableName: "order_items",
+                        whereCondition: "order_id = ?",
+                        whereArgs: [order["id"]],
+                      );
+                      int id = 1;
+
+                      for (final line in products) {
+
+                        items.add({
+                          "id": id,
+                          "sku": line["product_id"],
+                          "description": line["product_name"],
+                          "quantity": line["qty"],
+                          "price": line["trade"],
+                          "discount": line["discount"],
+                          "net": line["net"],
+                          "subtotal": line["subtotal"],
+                          "subtotal_tax": line["tax"],
+                          "total": double.parse((line["subtotal"] + line["tax"]).toStringAsFixed(2)),
+                          "total_tax": line["tax"],
+                        });
+
+                        id++;
+                      }
+
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              DraftOrderShippingScreen(
+                                  customerData: customerDetailsData,
+                                  orderItems: items,
+                                  orderTotal: order["order_value"],
+                                  totalTax: order["total_tax"],
+                                  poNumber: order["po_number"],
+                                  orderId: order["id"],
+                                  totalProducts: order["no_of_products"]
+                              ),
+                        ),
+                      );
+
+
+                    }else{
+                      showDialog(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          title: Row(
+                            children: const [
+                              Icon(Icons.wifi_off, color: Colors.red),
+                              SizedBox(width: 8),
+                              Text("No Internet"),
+                            ],
+                          ),
+                          content: const Text("Please check your internet connection."),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(context),
+                              child: const Text("OK"),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.reorder),
+                  label:  Text(
+                    "Place Order",
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }else{
+      return Card(
       margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
       elevation: 6,
       shape: RoundedRectangleBorder(
@@ -649,6 +1114,7 @@ class _OrderScreenState extends State<OrderScreen> {
         ),
       ),
     );
+    }
   }
 
   /// Product popup
